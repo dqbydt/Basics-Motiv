@@ -14,6 +14,10 @@ int main(int argc, char *argv[])
 
 #ifdef Q_OS_WIN
 
+    // Link to my SO post detailing the strange case of perverse allocation addresses
+    // seen on Win10:
+    // https://stackoverflow.com/q/65298802/3367247
+
     // https://docs.microsoft.com/en-us/windows/win32/memory/getting-process-heaps
     // 1.   Retrieve the number of active heaps for the current process
     //      so we can calculate the buffer size needed for the heap handles.
