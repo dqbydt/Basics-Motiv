@@ -7,6 +7,11 @@
 #endif
 
 #include "nomov.h"
+#include "AddrClassifier.h"
+
+// Define storage for AddrClassifier members:
+uintptr_t AddrClassifier::stackTop;
+uintptr_t AddrClassifier::stackBot;
 
 int main(int argc, char *argv[])
 {
@@ -68,12 +73,6 @@ int main(int argc, char *argv[])
         qDebug("Failed to free allocation from default process heap.");
     }
 
-    SIZE_T stackObject;
-    SIZE_T stackBot = (((SIZE_T) &stackObject) & ~0xfff);  // For a 4kB stack frame
-    SIZE_T stackTop = stackBot + 0xfff;
-
-    qDebug("Stack: 0x%llx - 0x%llx (%p)", stackTop, stackBot, &stackObject);
-
 #endif
 
 #ifdef Q_OS_LINUX
@@ -81,6 +80,15 @@ int main(int argc, char *argv[])
 
 
 #endif
+
+    size_t stackObject;
+    size_t stackBot = (((size_t) &stackObject) & ~0xfff);  // For a 4kB stack frame
+    size_t stackTop = stackBot + 0xfff;
+
+    qDebug("Stack: 0x%llx - 0x%llx (%p)", stackTop, stackBot, &stackObject);
+
+    AddrClassifier::stackTop = stackTop;
+    AddrClassifier::stackBot = stackBot;
 
     int i = 10;
     qDebug("Stack var i addr in main() = %p", &i);
@@ -93,5 +101,8 @@ int main(int argc, char *argv[])
     qDebug("NoMov alloc addr in main() = %p", pnm);
     delete pnm;
 
+    NoMov stacknm;
+
     return 0;
 }
+
