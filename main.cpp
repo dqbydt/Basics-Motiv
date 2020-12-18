@@ -85,23 +85,21 @@ int main(int argc, char *argv[])
     size_t stackBot = (((size_t) &stackObject) & ~0xfff);  // For a 4kB stack frame
     size_t stackTop = stackBot + 0xfff;
 
-    qDebug("Stack: 0x%llx - 0x%llx (%p)", stackTop, stackBot, &stackObject);
-
     AddrClassifier::stackTop = stackTop;
     AddrClassifier::stackBot = stackBot;
 
-    int i = 10;
-    qDebug("Stack var i addr in main() = %p", &i);
+    qDebug("Stack: 0x%llx - 0x%llx (%p)\n", stackTop, stackBot, &stackObject);
 
-    int *ptr = new int[64];
-    qDebug("int array malloc addr in main() = %p", ptr);
-    delete [] ptr;
+    // ---------------------------------------------------------------------
 
-    NoMov* pnm = new NoMov();
-    qDebug("NoMov alloc addr in main() = %p", pnm);
-    delete pnm;
+    NoMov nm1;
+    auto nm2{nm1};  // Uses CC
 
-    NoMov stacknm;
+    NoMov nm3;
+    nm3 = nm2;      // Uses CAO
+
+    NoMov* nm4 = new NoMov();
+    delete nm4;
 
     return 0;
 }
