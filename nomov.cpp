@@ -16,18 +16,13 @@ NoMov::NoMov()
     std::fill_n(mpAllocMem, ALLOC_SIZE, mObjID);    // Fill array with our id
 
     qDebug("NoMov %s CTOR: Obj addr = %s; Alloc addr = %s, contents %d",
-           qPrintable(mObjIDString),
-           qPrintable(AddrClassifier::classifyFull(mSelfAddr)),
-           qPrintable(AddrClassifier::classifyFull(mAllocAddr)),
-           mpAllocMem[0]);
+           objStr(), selfStr(), allocStr(), mpAllocMem[0]);
 }
 
 NoMov::~NoMov()
 {
     qDebug("NoMov %s DTOR: Obj addr = %s; Alloc contents %d",
-           qPrintable(mObjIDString),
-           qPrintable(AddrClassifier::classifyFull(mSelfAddr)),
-           mpAllocMem[0]);
+           objStr(), selfStr(), mpAllocMem[0]);
 
     delete [] mpAllocMem;
 }
@@ -36,13 +31,11 @@ NoMov::~NoMov()
 NoMov::NoMov(const NoMov &o)
 {
     init();
-    std::copy_n(o.mpAllocMem, ALLOC_SIZE, this->mpAllocMem);    // Copy from other (will get o's id!)
+    // Deep copy from o (will get o's id!)
+    std::copy_n(o.mpAllocMem, ALLOC_SIZE, this->mpAllocMem);
 
     qDebug("NoMov %s CC  : Obj addr = %s; Alloc addr = %s, contents %d",
-           qPrintable(mObjIDString),
-           qPrintable(AddrClassifier::classifyFull(mSelfAddr)),
-           qPrintable(AddrClassifier::classifyFull(mAllocAddr)),
-           mpAllocMem[0]);
+           objStr(), selfStr(), allocStr(), mpAllocMem[0]);
 }
 
 // Copy Assignment Operator
@@ -50,10 +43,7 @@ NoMov &NoMov::operator=(const NoMov &that)
 {
     if (this == &that) {
         qDebug("NoMov %s CAO : Obj addr = %s; Alloc addr = %s, contents %d",
-               qPrintable(mObjIDString),
-               qPrintable(AddrClassifier::classifyFull(mSelfAddr)),
-               qPrintable(AddrClassifier::classifyFull(mAllocAddr)),
-               mpAllocMem[0]);
+               objStr(), selfStr(), allocStr(), mpAllocMem[0]);
 
         return *this;   // Assigning to self
     }
@@ -63,11 +53,31 @@ NoMov &NoMov::operator=(const NoMov &that)
     delete [] mpAllocMem;   // Release original mem
     mpAllocMem = newAlloc;  // Reassign to new
     qDebug("NoMov %s CAO : Obj addr = %s; Alloc addr = %s, contents %d",
-           qPrintable(mObjIDString),
-           qPrintable(AddrClassifier::classifyFull(mSelfAddr)),
-           qPrintable(AddrClassifier::classifyFull(mAllocAddr)),
-           mpAllocMem[0]);
+           objStr(), selfStr(), allocStr(), mpAllocMem[0]);
 
     return *this;
+}
+
+// Retval is const to prevent it from being used as an lvalue. e.g.
+// cannot say (nm1 + nm2) = nm3.
+// https://www3.ntu.edu.sg/home/ehchua/programming/cpp/cp7_OperatorOverloading.html
+const NoMov NoMov::operator+(const NoMov &rhs) const
+{
+    qDebug("In NoMov::operator+; will add objID %d", rhs.mObjID);
+    NoMov ret;
+    // Add contents of rhs allocation --
+    // Note, iterator to last must be one-past-the-end
+    // Equivalent to the following:
+    //  for (; first != last; ++first) {
+    //      f(*first);
+    //  }
+    // In the lambda, must capture vars by ref in order to access
+    // the rhs object.
+    std::for_each(ret.mpAllocMem, ret.mpAllocMem+ALLOC_SIZE,
+                  [&](uint32_t& n){ n += rhs.mObjID; }
+    );
+
+    qDebug("NoMov::operator+ ret obj %d now has contents %d", ret.mObjID, ret.mpAllocMem[0]);
+    return ret;
 }
 

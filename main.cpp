@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <vector>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -13,10 +14,9 @@
 uintptr_t AddrClassifier::stackTop;
 uintptr_t AddrClassifier::stackBot;
 
-int main(int argc, char *argv[])
+// Tries to determine stack and heap on various platforms
+void queryStackHeap()
 {
-    QCoreApplication a(argc, argv);
-
 #ifdef Q_OS_WIN
 
     // Link to my SO post detailing the strange case of perverse allocation addresses
@@ -88,18 +88,38 @@ int main(int argc, char *argv[])
     AddrClassifier::stackTop = stackTop;
     AddrClassifier::stackBot = stackBot;
 
-    qDebug("Stack: 0x%llx - 0x%llx (%p)\n", stackTop, stackBot, &stackObject);
+    qDebug("Stack: 0x%llx - 0x%llx (Sample stack obj address: %p)\n", stackTop, stackBot, &stackObject);
+    qDebug("------------------------------------------------------\n");
+}
 
-    // ---------------------------------------------------------------------
+std::vector<NoMov> createAndInsert()
+{
+    std::vector<NoMov> coll;    // Vector of NoMovs
+    coll.reserve(3);            // Reserve mem for 3 elements (this is a heap alloc)
+    qDebug("coll address in createAndInsert: %s", acStr(&coll));
+    qDebug("&coll[0] = %s, &coll[1] = %s, &coll[2] = %s",
+           acStr(&coll[0]), acStr(&coll[1]), acStr(&coll[2]));
 
-    NoMov nm1;
-    auto nm2{nm1};  // Uses CC
+    NoMov nm;                   // Create a NoMov
 
-    NoMov nm3;
-    nm3 = nm2;      // Uses CAO
+    // All containers in C++ have value semantics, which means they create copies of
+    // values passed to them.
+    coll.push_back(nm);         // Insert local obj
+    coll.push_back(nm+nm);      // Insert temp obj -- CC for obj in vec; DTOR for temp
+    coll.push_back(nm);         // Insert local obj -- CC for obj in vec; DTOR for nm
 
-    NoMov* nm4 = new NoMov();
-    delete nm4;
+    return coll;
+}
+
+int main(int argc, char *argv[])
+{
+    QCoreApplication a(argc, argv);
+    queryStackHeap();
+
+    std::vector<NoMov> vnm;
+    qDebug("vnm address in main: %s", acStr(&vnm));
+    qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(NoMov), sizeof(NoMov));
+    vnm = createAndInsert();
 
     return 0;
 }

@@ -4,6 +4,17 @@
 #include <stdint.h>
 #include <QString>
 
+// For generic addresses. Call as acStr(&var)
+#define acStr(a)    qPrintable(AddrClassifier::classifyFull(reinterpret_cast<uintptr_t>(a)))
+
+// https://stackoverflow.com/a/9255906/3367247
+// Had used this to attempt to compile with C++03 (because std::clamp exists only
+// in C++17 and up, but there is no way to get that to work :(
+template <typename T>
+bool withinRange(const T& value, const T& low, const T& high) {
+    return !(value < low) && (value < high);
+}
+
 struct AddrClassifier {
 
     static uintptr_t stackTop, stackBot;
@@ -16,7 +27,8 @@ struct AddrClassifier {
     //             else returns val
     // So: if val has been returned then lo <= val <= hi
     static QString classify(uintptr_t a) {
-        if (a == std::clamp(a, stackBot, stackTop))
+        // if (withinRange(a, stackBot, stackTop))     // Pre c++1z
+        if (a == std::clamp(a, stackBot, stackTop)) // For c++1z
             return "S";
         else
             return "H";
