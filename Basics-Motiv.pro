@@ -9,6 +9,7 @@ CONFIG -= app_bundle
 
 SOURCES += \
         main.cpp \
+        mov.cpp \
         nomov.cpp
 
 # Default rules for deployment.
@@ -18,4 +19,6 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 HEADERS += \
     AddrClassifier.h \
-    nomov.h
+    mov.h \
+    nomov.h \
+    ro5.h

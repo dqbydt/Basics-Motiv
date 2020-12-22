@@ -4,6 +4,8 @@ void NoMov::init()
 {
     mSelfAddr = reinterpret_cast<uintptr_t>(this);
     mObjID = mSelfAddr & 0x3ff;    // Generates a 10-bit ID for this object
+    // Creates id string as S-031 for instance.
+    // The 2nd arg below formats number as fieldwidth 3, decimal, padded with 0.
     mObjIDString = QString("%1-%2").arg(AddrClassifier::classify(mSelfAddr)).arg(mObjID, 3, 10, QLatin1Char('0'));
 
     mpAllocMem = new uint32_t[ALLOC_SIZE];    // Allocate mem
@@ -23,7 +25,6 @@ NoMov::~NoMov()
 {
     qDebug("NoMov %s DTOR: Obj addr = %s; Alloc contents %d",
            objStr(), selfStr(), mpAllocMem[0]);
-
     delete [] mpAllocMem;
 }
 
@@ -48,6 +49,10 @@ NoMov &NoMov::operator=(const NoMov &that)
         return *this;   // Assigning to self
     }
 
+    // This sequence copied from https://en.cppreference.com/w/cpp/language/rule_of_three
+    // Not really needed here since ALLOC_SIZE is constant in this contrived case,
+    // but relevant when new alloc size is different from old alloc size (e.g. in
+    // a string class).
     uint32_t* newAlloc = new uint32_t[ALLOC_SIZE];      // Allocate new mem
     std::copy_n(that.mpAllocMem, ALLOC_SIZE, newAlloc); // Copy from that (will get that's id!)
     delete [] mpAllocMem;   // Release original mem

@@ -1,18 +1,28 @@
 #include <QCoreApplication>
+
 #include <vector>
+
+#include <malloc.h>
+#include <intsafe.h>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <malloc.h>
-#include <intsafe.h>
 #endif
 
 #include "nomov.h"
+#include "mov.h"
+#include "ro5.h"
 #include "AddrClassifier.h"
 
 // Define storage for AddrClassifier members:
 uintptr_t AddrClassifier::stackTop;
 uintptr_t AddrClassifier::stackBot;
+
+// For overloading the createAndInsert function with dummy arg differences
+// (Remember that you cannot overload a function by ret type)
+// https://stackoverflow.com/a/34095060/3367247
+constexpr uint32_t  NM  = 'N';
+constexpr int32_t   M   = 'M';
 
 // Tries to determine stack and heap on various platforms
 void queryStackHeap()
@@ -89,11 +99,12 @@ void queryStackHeap()
     AddrClassifier::stackBot = stackBot;
 
     qDebug("Stack: 0x%llx - 0x%llx (Sample stack obj address: %p)\n", stackTop, stackBot, &stackObject);
-    qDebug("------------------------------------------------------\n");
 }
 
-std::vector<NoMov> createAndInsert()
+// Unused in-param used merely to effect overload
+std::vector<NoMov> createAndInsert(uint32_t nmv)
 {
+    Q_UNUSED(nmv)
     std::vector<NoMov> coll;    // Vector of NoMovs
     coll.reserve(3);            // Reserve mem for 3 elements (this is a heap alloc)
     qDebug("coll address in createAndInsert: %s", acStr(&coll));
@@ -105,10 +116,47 @@ std::vector<NoMov> createAndInsert()
     // All containers in C++ have value semantics, which means they create copies of
     // values passed to them.
     coll.push_back(nm);         // Insert local obj
-    coll.push_back(nm+nm);      // Insert temp obj -- CC for obj in vec; DTOR for temp
-    coll.push_back(nm);         // Insert local obj -- CC for obj in vec; DTOR for nm
+    coll.push_back(nm+nm);      // Insert anon temp obj -- CC for obj in vec; DTOR for temp
+    coll.push_back(nm);         // Insert local named obj -- CC for obj in vec; DTOR for nm
 
     return coll;
+}
+
+// Unused in-param used merely to effect overload
+std::vector<Mov> createAndInsert(int32_t m)
+{
+    Q_UNUSED(m)
+    std::vector<Mov> coll;    // Vector of NoMovs
+    coll.reserve(3);            // Reserve mem for 3 elements (this is a heap alloc)
+    qDebug("coll address in createAndInsert: %s", acStr(&coll));
+    qDebug("&coll[0] = %s, &coll[1] = %s, &coll[2] = %s",
+           acStr(&coll[0]), acStr(&coll[1]), acStr(&coll[2]));
+
+    Mov mv;                   // Create a NoMov
+
+    // All containers in C++ have value semantics, which means they create copies of
+    // values passed to them.
+    coll.push_back(mv);          // Insert local obj
+    coll.push_back(mv+mv);        // Insert anon temp obj -- CC for obj in vec; DTOR for temp
+    coll.push_back(std::move(mv));         // Insert local named obj -- MC for obj in vec; DTOR for mv
+
+    return coll;
+}
+
+void fnByVal(Mov m) {
+    qDebug("fnByVal: arg m is %s", acStr(&m));
+}
+
+void fnByRRef(Mov&& m) {
+    qDebug("fnByRRef: arg m is %s", acStr(&m));
+    // NOTE! Within this function, m is still an lvalue (even though its *type*
+    // is rvalue ref) by virtue of the simple fact that it is the fn parameter
+    // and thereby has a name.
+    // Therefore, in order to invoke the *move* ctor for mloc below, it is
+    // still necessary to std::move(m). If you omit that, the COPY ctor
+    // gets invoked!
+    Mov mloc{std::move(m)};
+    qDebug("fnByRRef scavenged rvref argument. Now orig obj invalid!");
 }
 
 int main(int argc, char *argv[])
@@ -116,10 +164,35 @@ int main(int argc, char *argv[])
     QCoreApplication a(argc, argv);
     queryStackHeap();
 
+    qDebug("--------------------------------------------------------------");
+
+    // Non-Movable type
+    qDebug("Without Move Semantics:");
     std::vector<NoMov> vnm;
     qDebug("vnm address in main: %s", acStr(&vnm));
     qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(NoMov), sizeof(NoMov));
-    vnm = createAndInsert();
+    vnm = createAndInsert(NM);
+
+    qDebug("--------------------------------------------------------------");
+
+    // Movable type
+    qDebug("WITH Move Semantics:");
+    std::vector<Mov> vm;
+    qDebug("vm address in main: %s", acStr(&vm));
+    qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(Mov), sizeof(Mov));
+    vm = createAndInsert(M);
+
+    qDebug("--------------------------------------------------------------");
+
+    Mov mbvfc;
+    fnByVal(mbvfc);     // CC with placement new in the location of the arg on the stack
+    fnByVal(std::move(mbvfc));  // MC with placement new
+
+    Mov mbrrfc;
+    fnByRRef(std::move(mbrrfc));
+
+    qDebug("--------------------------DTORS-------------------------------");
+    // DTORs for all local objects after this
 
     return 0;
 }

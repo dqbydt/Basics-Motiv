@@ -1,5 +1,5 @@
-#ifndef NOMOV_H
-#define NOMOV_H
+#ifndef MOV_H
+#define MOV_H
 
 #include <QDebug>
 
@@ -14,7 +14,7 @@
 #define selfStr()   qPrintable(AddrClassifier::classifyFull(mSelfAddr))
 #define allocStr()  qPrintable(AddrClassifier::classifyFull(mAllocAddr))
 
-class NoMov
+class Mov
 {
 private:
     uint32_t*   mpAllocMem;
@@ -25,20 +25,26 @@ private:
 
     static constexpr size_t ALLOC_SIZE = 64;
 
-    void init();   // Get addr of this object
+    void init();        // Get addr of this object
+    void initLite();    // Init w/o mem alloc -- used in move functions
 
 public:
-    NoMov();
+    Mov();
 
-    // Non-movable type that manages a resource: Rule of Three applies
+    // Movable type that manages a resource: Rule of Five applies
     // https://en.cppreference.com/w/cpp/language/rule_of_three
-    ~NoMov();                               // I.   Dtor
-    NoMov(const NoMov& o);                  // II.  Copy ctor
-    NoMov& operator=(const NoMov& that);    // III. Copy Assignment Operator
+    // Unlike Rule of Three, failing to provide MC and MAO is
+    // usually not an error, but a missed optimization opportunity.
+    ~Mov();                             // I.   Dtor
+    Mov(const Mov& o);                  // II.  Copy ctor
+    Mov(Mov&& o);                       // III. Move ctor
+    Mov& operator=(const Mov& that);    // IV.  Copy Assignment Operator
+    Mov& operator=(Mov&& that);         // V.   Move Assignment Operator
 
     // Retval is const to prevent it from being used as an lvalue. e.g.
     // cannot say (nm1 + nm2) = nm3.
-    const NoMov operator+(const NoMov& rhs) const;
+    const Mov operator+(const Mov& rhs) const;
+
 };
 
-#endif // NOMOV_H
+#endif // MOV_H
