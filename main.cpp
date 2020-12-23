@@ -123,22 +123,37 @@ std::vector<NoMov> createAndInsert(uint32_t nmv)
 }
 
 // Unused in-param used merely to effect overload
-std::vector<Mov> createAndInsert(int32_t m)
+std::vector<Mov> createAndInsert(int32_t mov)
 {
-    Q_UNUSED(m)
-    std::vector<Mov> coll;    // Vector of NoMovs
-    coll.reserve(3);            // Reserve mem for 3 elements (this is a heap alloc)
-    qDebug("coll address in createAndInsert: %s", acStr(&coll));
-    qDebug("&coll[0] = %s, &coll[1] = %s, &coll[2] = %s",
-           acStr(&coll[0]), acStr(&coll[1]), acStr(&coll[2]));
+    Q_UNUSED(mov)
+    constexpr int ARRAY_SIZE = 8;
 
-    Mov mv;                   // Create a NoMov
+    std::vector<Mov> coll;      // Vector of NoMovs
+    coll.reserve(ARRAY_SIZE);   // Reserve mem for vector (this is a heap alloc)
+
+    qDebug("coll address in createAndInsert: %s", acStr(&coll));
+    for (int i=0; i<ARRAY_SIZE; i++)  {
+        qDebug("&coll[%d] = %s", i, acStr(&coll[i]));
+    }
+
+    Mov mv;                 // Create a NoMov
 
     // All containers in C++ have value semantics, which means they create copies of
     // values passed to them.
-    coll.push_back(mv);          // Insert local obj
-    coll.push_back(mv+mv);        // Insert anon temp obj -- CC for obj in vec; DTOR for temp
-    coll.push_back(std::move(mv));         // Insert local named obj -- MC for obj in vec; DTOR for mv
+    coll.push_back(mv);             // Insert local obj -- CC for obj in vec
+    coll.push_back(mv+mv);          // Insert anon temp obj -- op+ CTOR for temp; CC for obj in vec; DTOR for temp
+    coll.emplace_back(mv+mv);       // This *also* causes the same -- op+ CTOR for temp; CC for obj in vec; DTOR for temp
+    coll.push_back(Mov());          // S-ddd CTOR; MC for H-ddd obj; S-ddd DTOR
+    // emplace_back() constructs object in-place in the container, instead of the
+    // temp CTOR - MC - temp DTOR dance
+    // https://abseil.io/tips/65
+    // https://abseil.io/tips/112
+    // NOTE: emplace_back only takes the direct ctor arguments, which it fwds to the
+    // ctor of the object! Think make_unique. The following does NOT work: coll.emplace_back(Mov())
+    // Rather - this results in the same S-CTOR; H-MC; S-DTOR sequence as with push_back.
+    // push_back does NOT have this facility; must give it an actual obj - tmp or otherwise.
+    coll.emplace_back();            // Just calls a H-ddd ctor!
+    coll.push_back(std::move(mv));  // Insert local named obj -- MC for obj in vec
 
     return coll;
 }
@@ -154,8 +169,11 @@ void fnByRRef(Mov&& m) {
     // and thereby has a name.
     // Therefore, in order to invoke the *move* ctor for mloc below, it is
     // still necessary to std::move(m). If you omit that, the COPY ctor
-    // gets invoked!
+    // gets invoked! See Josuttis Sec 3.2.2: MS is not passed through.
     Mov mloc{std::move(m)};
+    // As per usual C++ semantics, MC invoked here, not MAO. This is because
+    // a new obj is being created.
+//    Mov mloc = std::move(m);
     qDebug("fnByRRef scavenged rvref argument. Now orig obj invalid!");
 }
 

@@ -92,6 +92,18 @@ Mov &Mov::operator=(const Mov &that)
     return *this = Mov(that);
 }
 
+// MAO
+Mov& Mov::operator=(Mov&& that)
+{
+    // https://en.cppreference.com/w/cpp/algorithm/swap
+    // Our mem is transferred into that. When that gets destroyed eventually,
+    // that mem will be released.
+    std::swap(mpAllocMem, that.mpAllocMem);
+    qDebug("Mov %s MAO : Obj addr = %s; Alloc addr = %s, contents %d",
+           objStr(), selfStr(), allocStr(), mpAllocMem[0]);
+    return *this;
+}
+
 // Retval is const to prevent it from being used as an lvalue. e.g.
 // cannot say (nm1 + nm2) = nm3.
 // https://www3.ntu.edu.sg/home/ehchua/programming/cpp/cp7_OperatorOverloading.html
@@ -113,18 +125,5 @@ const Mov Mov::operator+(const Mov &rhs) const
 
     qDebug("Mov::operator+ ret obj %d now has contents %d", ret.mObjID, ret.mpAllocMem[0]);
     return ret;
-}
-
-
-// MAO
-Mov& Mov::operator=(Mov&& that)
-{
-    // https://en.cppreference.com/w/cpp/algorithm/swap
-    // Our mem is transferred into that. When that gets destroyed eventually,
-    // that mem will be released.
-    std::swap(mpAllocMem, that.mpAllocMem);
-    qDebug("Mov %s MAO : Obj addr = %s; Alloc addr = %s, contents %d",
-           objStr(), selfStr(), allocStr(), mpAllocMem[0]);
-    return *this;
 }
 
