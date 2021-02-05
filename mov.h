@@ -35,11 +35,15 @@ public:
     // https://en.cppreference.com/w/cpp/language/rule_of_three
     // Unlike Rule of Three, failing to provide MC and MAO is
     // usually not an error, but a missed optimization opportunity.
-    ~Mov();                             // I.   Dtor
-    Mov(const Mov& o);                  // II.  Copy ctor
-    Mov(Mov&& o);                       // III. Move ctor
-    Mov& operator=(const Mov& that);    // IV.  Copy Assignment Operator
-    Mov& operator=(Mov&& that);         // V.   Move Assignment Operator
+    ~Mov();                                 // I.   Dtor
+    Mov(const Mov& o);                      // II.  Copy ctor
+    Mov(Mov&& o) noexcept;                  // III. Move ctor*
+    Mov& operator=(const Mov& that);        // IV.  Copy Assignment Operator
+    Mov& operator=(Mov&& that) noexcept;    // V.   Move Assignment Operator*
+
+    // *for noexcept, see discussion in book ch 7. Tl;dr: needed to enable
+    // moves instead of copies in std::vector reallocation. noexcept specifier needed
+    // on both declaration (.h) and defn (.cpp).
 
     // Retval is const to prevent it from being used as an lvalue. e.g.
     // cannot say (nm1 + nm2) = nm3.

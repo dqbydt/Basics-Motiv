@@ -1,6 +1,8 @@
 #include <QCoreApplication>
 
 #include <vector>
+#include <utility>
+#include <functional>
 
 #include <malloc.h>
 #include <intsafe.h>
@@ -12,6 +14,7 @@
 #include "nomov.h"
 #include "mov.h"
 #include "ro5.h"
+#include "testobj.h"
 #include "AddrClassifier.h"
 
 // Define storage for AddrClassifier members:
@@ -21,8 +24,8 @@ uintptr_t AddrClassifier::stackBot;
 // For overloading the createAndInsert function with dummy arg differences
 // (Remember that you cannot overload a function by ret type)
 // https://stackoverflow.com/a/34095060/3367247
-constexpr uint32_t  NM  = 'N';
-constexpr int32_t   M   = 'M';
+constexpr uint32_t  DUMMY_NM  = 'N';
+constexpr int32_t   DUMMY_M   = 'M';
 
 // Tries to determine stack and heap on various platforms
 void queryStackHeap()
@@ -102,9 +105,9 @@ void queryStackHeap()
 }
 
 // Unused in-param used merely to effect overload
-std::vector<NoMov> createAndInsert(uint32_t nmv)
+std::vector<NoMov> createAndInsert(uint32_t dummy_arg_for_ovl)
 {
-    Q_UNUSED(nmv)
+    Q_UNUSED(dummy_arg_for_ovl)
     std::vector<NoMov> coll;    // Vector of NoMovs
     coll.reserve(3);            // Reserve mem for 3 elements (this is a heap alloc)
     qDebug("coll address in createAndInsert: %s", acStr(&coll));
@@ -123,9 +126,9 @@ std::vector<NoMov> createAndInsert(uint32_t nmv)
 }
 
 // Unused in-param used merely to effect overload
-std::vector<Mov> createAndInsert(int32_t mov)
+std::vector<Mov> createAndInsert(int32_t dummy_arg_for_ovl)
 {
-    Q_UNUSED(mov)
+    Q_UNUSED(dummy_arg_for_ovl)
     constexpr int ARRAY_SIZE = 8;
 
     std::vector<Mov> coll;      // Vector of NoMovs
@@ -158,11 +161,11 @@ std::vector<Mov> createAndInsert(int32_t mov)
     return coll;
 }
 
-void fnByVal(Mov m) {
+void fnParmByVal(Mov m) {
     qDebug("fnByVal: arg m is %s", acStr(&m));
 }
 
-void fnByRRef(Mov&& m) {
+void fnParmByRRef(Mov&& m) {
     qDebug("fnByRRef: arg m is %s", acStr(&m));
     // NOTE! Within this function, m is still an lvalue (even though its *type*
     // is rvalue ref) by virtue of the simple fact that it is the fn parameter
@@ -177,40 +180,127 @@ void fnByRRef(Mov&& m) {
     qDebug("fnByRRef scavenged rvref argument. Now orig obj invalid!");
 }
 
+
+Mov fnRetByVal(int32_t dummy_arg_for_ovl) {
+    Q_UNUSED(dummy_arg_for_ovl)   // Parm used only to enable fn overload
+    Mov m;
+    //return m;
+    return std::move(m);  // BAD! Don't do this! QtCreator will also emit warning
+}
+
+NoMov fnRetByVal(uint32_t dummy_arg_for_ovl) {
+    Q_UNUSED(dummy_arg_for_ovl)
+    NoMov nm;
+    return nm;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
     queryStackHeap();
 
     qDebug("--------------------------------------------------------------");
+    {
+        // Non-Movable type
+        qDebug("Without Move Semantics:");
+        std::vector<NoMov> vnm;
+        qDebug("vnm address in main: %s", acStr(&vnm));
+        qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(NoMov), sizeof(NoMov));
+        vnm = createAndInsert(DUMMY_NM);
 
-    // Non-Movable type
-    qDebug("Without Move Semantics:");
-    std::vector<NoMov> vnm;
-    qDebug("vnm address in main: %s", acStr(&vnm));
-    qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(NoMov), sizeof(NoMov));
-    vnm = createAndInsert(NM);
+        qDebug("--------------------------------------------------------------");
 
+        // Movable type
+        qDebug("WITH Move Semantics:");
+        std::vector<Mov> vm;
+        qDebug("vm address in main: %s", acStr(&vm));
+        qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(Mov), sizeof(Mov));
+        vm = createAndInsert(DUMMY_M);
+    }
+    qDebug("--------------------------------------------------------------");
+    {
+        Mov mbvfc;
+        fnParmByVal(mbvfc);     // CC with placement new in the location of the arg on the stack
+        fnParmByVal(std::move(mbvfc));  // MC with placement new
+
+        Mov mbrrfc;
+        fnParmByRRef(std::move(mbrrfc));
+    }
+    qDebug("--------------------------------------------------------------");
+    {
+        NoMov nmret;                        // CTOR for stack obj
+        nmret = fnRetByVal(DUMMY_NM);       // CTOR, then CAO, then DTOR
+        // NoMov nmret = fnRetByVal(DUMMY_NM);   // Results in single CTOR call!
+
+        //Mov mret;                           // CTOR for stack obj
+        //mret = fnRetByVal(DUMMY_M);         // CTOR, then MAO, then DTOR
+
+        // If we std::move(retval) in the function, this results in CTOR+MC+DTOR!
+        // Compared with a single CTOR call if we don't std::move.
+        Mov mret = fnRetByVal(DUMMY_M);
+    }
+    qDebug("---------------------for Loop Test----------------------------");
+    {
+        // Within each loop iteration, a new scope begins and ends. So all
+        // vars defined inside the loop body get CTORd and DTORd at the end
+        // of that iteration!
+        for (int i=0; i<5; i++) {
+            qDebug("Iteration %d", i);
+            Mov mov1, mov2; // CTORs for local objs
+            //TestObjM tomex{mov1, mov2};     // CC into params, MC into members, DTORLs for params
+        }   // <-- DTORs for members, DTORs for local objs mov1, mov2.
+    }
+    qDebug("-----------------Initializing Members-------------------------");
+    {
+        Mov mov1, mov2;
+
+        TestObjM tom{Mov(), Mov()};
+
+        // The following is pointless/redundant since the std::move is static_casting
+        // rvalues into rvalues.
+        //TestObjM tom2{std::move(Mov()), std::move(Mov())};
+
+        //TestObjM tomex{mov1, mov2};     // TestObj ctor with existing objects
+        //TestObjM tomexmv{std::move(mov1), std::move(mov2)};     // TestObj ctor with existing objects
+    }
+
+    qDebug("------------------noexcept + MS on Class Members--------------------");
+    {
+        // From http://cppmove.com/code/basics/members.cpp.html
+        Mov mo; // outside
+        std::pair<Mov, Mov> prOwnMembers;            // Both members belong to this obj
+        //std::pair<Mov, Mov&> prRefMember{{}, mo};    // One of the members is a ref to an external obj. First mem gets *copied*: CTOR, CC, DTOR
+        std::pair<Mov, Mov&> prRefMember{Mov{}, mo};    // This one results in a move
+        //std::pair<Mov, Mov&> prRefMember{std::move(Mov{}), mo};    // Also results in a move (although QtC throws an error)
+        // ERROR-> std::pair<Mov, Mov&> prRefMember = std::make_pair(Mov{}, mo);    // How to make this work? "no viable ctor" error
+        // https://stackoverflow.com/questions/6162201/c11-use-case-for-piecewise-construct-of-pair-and-tuple
+        //std::pair<Mov, Mov&> prRefMember(std::piecewise_construct, Mov{}, mo);    // One of the members is a ref to an external obj
+        // WB link to std::pair attempts:
+        // https://wandbox.org/permlink/xRCyyZnzwpiSTr5X
+
+        // Also step through this with the noexcept removed on the Mov MC/MAO: all the vector-resize
+        // operations drop to copies instead of moves.
+        std::vector<Mov> coll;
+        qDebug() << coll.capacity();    // 0
+
+        coll.push_back(prOwnMembers.first);          // Copies -- remember, containers make copies by default
+        qDebug() << coll.capacity();    // 0->1
+        coll.push_back(prOwnMembers.second);         // Copies -- remember, containers make copies by default
+        qDebug() << coll.capacity();    // 1->2
+
+        coll.push_back(std::move(prOwnMembers).first);   // Now moves; could also do std::move(pOwnMem.first)
+        qDebug() << coll.capacity();    // 2->4
+        coll.push_back(std::move(prOwnMembers).second);  // Now moves; could also do std::move(pOwnMem.second)
+        qDebug() << coll.capacity();    // 4
+
+        coll.push_back(std::move(prRefMember).first);   // Moves
+        qDebug() << coll.capacity();    // 4->8
+        coll.push_back(std::move(prRefMember).second);  // *** Copies ***
+        qDebug() << coll.capacity();    // 8
+
+    }
     qDebug("--------------------------------------------------------------");
 
-    // Movable type
-    qDebug("WITH Move Semantics:");
-    std::vector<Mov> vm;
-    qDebug("vm address in main: %s", acStr(&vm));
-    qDebug("sizeof(NoMov) = %llu (=0x%llx) bytes", sizeof(Mov), sizeof(Mov));
-    vm = createAndInsert(M);
-
-    qDebug("--------------------------------------------------------------");
-
-    Mov mbvfc;
-    fnByVal(mbvfc);     // CC with placement new in the location of the arg on the stack
-    fnByVal(std::move(mbvfc));  // MC with placement new
-
-    Mov mbrrfc;
-    fnByRRef(std::move(mbrrfc));
-
-    qDebug("--------------------------DTORS-------------------------------");
-    // DTORs for all local objects after this
 
     return 0;
 }

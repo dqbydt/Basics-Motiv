@@ -13,7 +13,11 @@ void Mov::init()
 void Mov::initLite()
 {
     mSelfAddr = reinterpret_cast<uintptr_t>(this);
-    mObjID = mSelfAddr & 0x3ff;    // Generates a 10-bit ID for this object
+    // Generates a 10-bit ID for this object
+    // But beware, this might not yield unique addresses: the distinct obj addresses
+    // 0x0077fdb0 and 0x0077f9b0 both result in the same bottom bits and hence the
+    // same objID, 0x1b0 = 432.
+    mObjID = mSelfAddr & 0x3ff;
     // Creates id string as S-031 for instance.
     // The 2nd arg below formats number as fieldwidth 3, decimal, padded with 0.
     mObjIDString = QString("%1-%2").arg(AddrClassifier::classify(mSelfAddr)).arg(mObjID, 3, 10, QLatin1Char('0'));
@@ -37,9 +41,14 @@ Mov::~Mov()
     // This means that even if the value has been moved away, we don't
     // need to check for nullptr on the allocation before calling delete
     // here.
-    // Will print -1 if obj was moved from
-    qDebug("Mov %s DTOR: Obj addr = %s; Alloc contents %d",
-           objStr(), selfStr(), (mpAllocMem)? mpAllocMem[0] : -1);
+    // Will print -1 as the addr if obj was moved from. Also in that case
+    // DTOR annotation is DTORL for DTOR "Lite" because mem dealloc is not
+    // needed.
+    qDebug("Mov %s %s: Obj addr = %s; Alloc contents %d",
+           objStr(),
+           (mpAllocMem)? "DTOR" : "DTORL",
+           selfStr(),
+           (mpAllocMem)? mpAllocMem[0] : -1);
 
     delete [] mpAllocMem;
 }
@@ -66,8 +75,8 @@ Mov::Mov(const Mov &o)
 // variable, so that's what we need for the Mov Ctor. In
 // y = std::exchange(x,k);
 // y <- x, x <- k
-Mov::Mov(Mov &&o) : mpAllocMem{std::exchange(o.mpAllocMem, nullptr)},
-                    mAllocAddr{std::exchange(o.mAllocAddr, 0x0)}
+Mov::Mov(Mov &&o) noexcept: mpAllocMem{std::exchange(o.mpAllocMem, nullptr)},
+                            mAllocAddr{std::exchange(o.mAllocAddr, 0x0)}
 {
     initLite();
 
@@ -93,7 +102,7 @@ Mov &Mov::operator=(const Mov &that)
 }
 
 // MAO
-Mov& Mov::operator=(Mov&& that)
+Mov& Mov::operator=(Mov&& that) noexcept
 {
     // https://en.cppreference.com/w/cpp/algorithm/swap
     // Our mem is transferred into that. When that gets destroyed eventually,

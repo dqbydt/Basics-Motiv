@@ -21,4 +21,5 @@ HEADERS += \
     AddrClassifier.h \
     mov.h \
     nomov.h \
-    ro5.h
+    ro5.h \
+    testobj.h
